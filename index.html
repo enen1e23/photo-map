@@ -1,1 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>📸 照片地图生成器（网页版）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet 地图样式 -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <!-- 简单页面样式 -->
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f5f5f5;
+    }
+    .layout {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    .top-bar {
+      padding: 10px 16px;
+      background: #ffffff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+    }
+    .top-bar-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-right: 16px;
+      white-space: nowrap;
+    }
+    .top-bar input[type="text"] {
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      min-width: 220px;
+    }
+    .top-bar label {
+      font-size: 13px;
+      color: #555;
+    }
+    .top-bar input[type="file"] {
+      font-size: 13px;
+    }
+    .btn {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-primary {
+      background: #4CAF50;
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #43a047;
+    }
+    .btn-secondary {
+      background: #e0e0e0;
+      color: #333;
+    }
+    .btn-secondary:hover {
+      background: #d5d5d5;
+    }
+    .status-text {
+      font-size: 12px;
+      color: #666;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+    .content {
+      flex: 1;
+      position: relative;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    .leaflet-container {
+      background: #dde3ea;
+    }
+
+    /* 弹出框样式 */
+    .photo-popup {
+      text-align: center;
+      min-width: 250px;
+    }
+    .photo-popup img {
+      width: 100%;
+      max-width: 400px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .photo-popup .info {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+    }
+    .photo-popup .info strong {
+      color: #333;
+    }
+    .photo-marker {
+      background: #4CAF50;
+      border: 3px solid white;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+    .leaflet-popup-content {
+      margin: 15px;
+    }
+
+    .small-text {
+      font-size: 11px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="top-bar">
+      <div class="top-bar-title">📸 照片地图生成器（网页版）</div>
+
+      <label>
+        标题：
+        <input type="text" id="titleInput" placeholder="例如：天津旅行地图" />
+      </label>
+
+      <label>
+        选择照片文件夹：
+        <!-- webkitdirectory 仅在基于 Chromium 的浏览器中可用（Chrome / Edge） -->
+        <input type="file" id="dirInput" webkitdirectory multiple accept="image/*">
+      </label>
+
+      <label>
+        或选择照片文件：
+        <input type="file" id="fileInput" multiple accept="image/*">
+      </label>
+
+      <button id="generateBtn" class="btn btn-primary">🚀 生成地图</button>
+      <!-- 新增：清空按钮 -->
+      <button id="clearBtn" class="btn btn-secondary">🧹 清空选择</button>
+
+      <div class="status-text" id="statusText">请选择照片并点击“生成地图”。</div>
+
+      <div class="small-text">
+        （所有处理都在本地浏览器完成，不会上传到服务器）
+      </div>
+    </div>
+
+    <div class="content">
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <!-- exif-js：用来读取照片 EXIF 信息 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+
+  <script>
+    // =============== 工具函数：DMS -> 十进制度数 ===============
+    function dmsToDecimal(dms, ref) {
+      if (!dms || dms.length < 3 || !ref) return null;
+
+      function toFloat(v) {
+        if (typeof v === "number") return v;
+        // exif-js 可能返回形如 {numerator: xx, denominator: xx}
+        if (typeof v === "object" && v.numerator !== undefined && v.denominator) {
+          return v.numerator / v.denominator;
+        }
+        // 或 "xx/yy" 字符串
+        if (typeof v === "string") {
+          const parts = v.split("/");
+          if (parts.length === 2) {
+            const num = parseFloat(parts[0]);
+            const den = parseFloat(parts[1]);
+            if (!isNaN(num) && !isNaN(den) && den !== 0) {
+              return num / den;
+            }
+          } else {
+            const f = parseFloat(v);
+            if (!isNaN(f)) return f;
+          }
+        }
+        return NaN;
+      }
+
+      const deg = toFloat(dms[0]);
+      const min = toFloat(dms[1]);
+      const sec = toFloat(dms[2]);
+
+      if ([deg, min, sec].some(v => isNaN(v))) return null;
+
+      let dec = deg + (min / 60.0) + (sec / 3600.0);
+      ref = String(ref).toUpperCase();
+      if (ref === "S" || ref === "W") {
+        dec = -dec;
+      }
+      return dec;
+    }
+
+    // =============== 全局变量：地图实例 ===============
+    let map = null;
+    let markersLayer = null;
+    let pathLayer = null;
+
+    function initMapIfNeeded() {
+      if (!map) {
+        map = L.map("map").setView([34.0, 108.0], 5);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "© OpenStreetMap contributors"
+        }).addTo(map);
+      }
+    }
+
+    function clearMapLayers() {
+      if (markersLayer) {
+        markersLayer.remove();
+        markersLayer = null;
+      }
+      if (pathLayer) {
+        pathLayer.remove();
+        pathLayer = null;
+      }
+    }
+
+    // =============== 处理单个文件：读取 EXIF + DataURL ===============
+    function processFile(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+
+        reader.onload = function (e) {
+          let tags;
+          try {
+            tags = EXIF.readFromBinaryFile(e.target.result);
+          } catch (err) {
+            console.warn("EXIF 解析失败：", file.name, err);
+            resolve(null);
+            return;
+          }
+
+          const latDMS = tags.GPSLatitude;
+          const lonDMS = tags.GPSLongitude;
+          const latRef = tags.GPSLatitudeRef;
+          const lonRef = tags.GPSLongitudeRef;
+
+          const lat = dmsToDecimal(latDMS, latRef);
+          const lon = dmsToDecimal(lonDMS, lonRef);
+
+          if (lat === null || lon === null) {
+            // 没有 GPS 信息，返回 null
+            resolve(null);
+            return;
+          }
+
+          // 获取其他信息
+          const dt = tags.DateTimeOriginal || tags.DateTime || null;
+          const make = tags.Make || "";
+          const model = tags.Model || "";
+          const camera = (make && model) ? (make + " " + model) : (model || null);
+
+          let altitude = null;
+          if (tags.GPSAltitude) {
+            const altVal = tags.GPSAltitude;
+            if (typeof altVal === "object" && altVal.numerator !== undefined) {
+              altitude = altVal.numerator / altVal.denominator;
+            } else if (typeof altVal === "number") {
+              altitude = altVal;
+            }
+          }
+
+          // 再读取一次文件，获取 DataURL 用于缩略图
+          const reader2 = new FileReader();
+          reader2.onload = function (ev) {
+            const dataUrl = ev.target.result;
+            resolve({
+              lat: lat,
+              lon: lon,
+              filename: file.name,
+              datetime: dt ? String(dt) : null,
+              camera: camera ? String(camera) : null,
+              altitude: altitude,
+              image: dataUrl
+            });
+          };
+          reader2.onerror = function () {
+            // 即使缩略图失败，也返回基本信息
+            resolve({
+              lat: lat,
+              lon: lon,
+              filename: file.name,
+              datetime: dt ? String(dt) : null,
+              camera: camera ? String(camera) : null,
+              altitude: altitude,
+              image: null
+            });
+          };
+          reader2.readAsDataURL(file);
+        };
+
+        reader.onerror = function () {
+          console.warn("文件读取失败：", file.name);
+          resolve(null);
+        };
+
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    // =============== 主流程：生成地图 ===============
+    async function generateMapFromFiles(fileList) {
+      const statusText = document.getElementById("statusText");
+
+      if (!fileList || fileList.length === 0) {
+        alert("请先选择至少一张照片。");
+        return;
+      }
+
+      statusText.textContent = `正在读取 ${fileList.length} 张照片的 EXIF 信息，请稍候…`;
+
+      const files = Array.from(fileList);
+      const photoInfos = [];
+
+      let processed = 0;
+      for (const file of files) {
+        // 只处理图片
+        if (!file.type.startsWith("image/")) {
+          processed++;
+          continue;
+        }
+        const info = await processFile(file);
+        if (info && info.lat !== null && info.lon !== null) {
+          photoInfos.push(info);
+        }
+        processed++;
+        statusText.textContent = `已处理 ${processed}/${files.length} 张照片…`;
+      }
+
+      if (photoInfos.length === 0) {
+        statusText.textContent = "未找到包含 GPS 信息的照片。";
+        alert("没有发现带 GPS 坐标的照片，无法生成地图。");
+        return;
+      }
+
+      // 按时间排序
+      photoInfos.sort((a, b) => {
+        const da = a.datetime || "";
+        const db = b.datetime || "";
+        return da.localeCompare(db);
+      });
+
+      // 计算中心点
+      const centerLat = photoInfos.reduce((sum, p) => sum + p.lat, 0) / photoInfos.length;
+      const centerLon = photoInfos.reduce((sum, p) => sum + p.lon, 0) / photoInfos.length;
+
+      initMapIfNeeded();
+      clearMapLayers();
+
+      map.setView([centerLat, centerLon], 12);
+
+      markersLayer = L.layerGroup().addTo(map);
+
+      const pathCoords = [];
+      const markers = [];
+
+      photoInfos.forEach((photo, idx) => {
+        const index = idx + 1;
+        pathCoords.push([photo.lat, photo.lon]);
+
+        const markerIcon = L.divIcon({
+          className: "photo-marker",
+          html: index,
+          iconSize: [30, 30]
+        });
+
+        let popupContent = '<div class="photo-popup">';
+        if (photo.image) {
+          popupContent += `<img src="${photo.image}" alt="${photo.filename}">`;
+        }
+        popupContent += '<div class="info">';
+        popupContent += `<strong>📷 ${photo.filename}</strong><br>`;
+        if (photo.datetime) {
+          popupContent += `🕐 ${photo.datetime}<br>`;
+        }
+        if (photo.camera) {
+          popupContent += `📱 ${photo.camera}<br>`;
+        }
+        if (photo.altitude !== null && !isNaN(photo.altitude)) {
+          popupContent += `⛰️ 海拔: ${photo.altitude.toFixed(1)} m<br>`;
+        }
+        popupContent += `📍 ${photo.lat.toFixed(6)}, ${photo.lon.toFixed(6)}`;
+        popupContent += "</div></div>";
+
+        const marker = L.marker([photo.lat, photo.lon], { icon: markerIcon })
+          .bindPopup(popupContent, { maxWidth: 450 })
+          .addTo(markersLayer);
+
+        markers.push(marker);
+      });
+
+      // 折线连接轨迹
+      if (pathCoords.length > 1) {
+        pathLayer = L.polyline(pathCoords, {
+          color: "#FF5722",
+          weight: 3,
+          opacity: 0.7,
+          dashArray: "10,10",
+          lineJoin: "round"
+        }).addTo(map);
+      }
+
+      // 自适应视图
+      if (markers.length > 0) {
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.1));
+      }
+
+      const titleInput = document.getElementById("titleInput");
+      const title = titleInput.value.trim() || "我的照片地图";
+      statusText.textContent = `✅ 地图已生成：${title}（共 ${photoInfos.length} 张带 GPS 的照片）`;
+
+      // 生成完后，自动清空文件选择（强制下次重新选）
+      const dirInput = document.getElementById("dirInput");
+      const fileInput = document.getElementById("fileInput");
+      dirInput.value = "";
+      fileInput.value = "";
+    }
+
+    // =============== 事件绑定 ===============
+    window.addEventListener("DOMContentLoaded", () => {
+      const dirInput = document.getElementById("dirInput");
+      const fileInput = document.getElementById("fileInput");
+      const generateBtn = document.getElementById("generateBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      const titleInput = document.getElementById("titleInput");
+      const statusText = document.getElementById("statusText");
+
+      // 默认标题
+      titleInput.value = "我的照片地图";
+
+      generateBtn.addEventListener("click", () => {
+        const dirFiles = dirInput.files;
+        const normalFiles = fileInput.files;
+
+        if (dirFiles && dirFiles.length > 0) {
+          generateMapFromFiles(dirFiles);
+        } else if (normalFiles && normalFiles.length > 0) {
+          generateMapFromFiles(normalFiles);
+        } else {
+          alert("请先选择照片（文件夹或文件都可以）。");
+        }
+      });
+
+      // 新增：清空按钮逻辑
+      clearBtn.addEventListener("click", () => {
+        dirInput.value = "";
+        fileInput.value = "";
+        clearMapLayers();
+        if (map) {
+          // 地图恢复到一个大致的全国视角
+          map.setView([34.0, 108.0], 5);
+        }
+        statusText.textContent = "已清空选择，请重新选择照片并生成地图。";
+      });
+
+      // 初始化一个空地图背景
+      initMapIfNeeded();
+    });
+  </script>
+</body>
+</html>
 
