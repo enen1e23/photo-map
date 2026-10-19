@@ -2,509 +2,1012 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>📸 照片地图生成器（网页版）</title>
+  <title>📸 照片地图生成器 · 免费底图</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Leaflet 地图样式 -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-
-  <!-- 简单页面样式 -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css">
   <style>
-    * {
-      box-sizing: border-box;
-    }
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #f5f5f5;
-    }
-    .layout {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; height:100%;
+      font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:#f5f5f5; }
+    .layout { display:flex; flex-direction:column; height:100vh; }
+
     .top-bar {
-      padding: 10px 16px;
-      background: #ffffff;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-      z-index: 10;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px 16px;
+      padding:9px 14px; background:#fff;
+      box-shadow:0 2px 6px rgba(0,0,0,0.1); z-index:10;
+      display:flex; flex-wrap:wrap; align-items:center; gap:7px 12px;
     }
-    .top-bar-title {
-      font-size: 18px;
-      font-weight: 600;
-      margin-right: 16px;
-      white-space: nowrap;
-    }
+    .top-bar-title { font-size:16px; font-weight:700; white-space:nowrap; }
+    .top-bar label  { font-size:13px; color:#555; }
     .top-bar input[type="text"] {
-      padding: 4px 8px;
-      border-radius: 4px;
-      border: 1px solid #ddd;
-      min-width: 220px;
+      padding:4px 8px; border-radius:4px; border:1px solid #ddd;
     }
-    .top-bar label {
-      font-size: 13px;
-      color: #555;
-    }
-    .top-bar input[type="file"] {
-      font-size: 13px;
-    }
+    .top-bar input[type="file"] { font-size:13px; }
+    .vd { width:1px; height:24px; background:#e0e0e0; flex-shrink:0; }
+
     .btn {
-      padding: 6px 12px;
-      border-radius: 4px;
-      border: none;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
+      padding:5px 10px; border-radius:5px; border:none; cursor:pointer;
+      font-size:13px; font-weight:500; display:inline-flex; align-items:center; gap:3px;
+      transition:filter .15s;
     }
-    .btn-primary {
-      background: #4CAF50;
-      color: #fff;
+    .btn:hover { filter:brightness(0.92); }
+    .btn-green  { background:#43a047; color:#fff; }
+    .btn-gray   { background:#e0e0e0; color:#333; }
+    .btn-blue   { background:#1565C0; color:#fff; }
+    .btn-red    { background:#e53935; color:#fff; }
+    .btn-teal   { background:#00838f; color:#fff; }
+    .btn-toggle {
+      background:#e8f5e9; color:#2e7d32;
+      border:1.5px solid #81c784;
     }
-    .btn-primary:hover {
-      background: #43a047;
+    .btn-toggle.on { background:#2e7d32; color:#fff; border-color:#2e7d32; }
+
+    /* 加载进度条 */
+    .progress-bar-wrap {
+      display:none; position:absolute; bottom:0; left:0; right:0;
+      height:4px; background:#e0e0e0; z-index:1000;
     }
-    .btn-secondary {
-      background: #e0e0e0;
-      color: #333;
+    .progress-bar { height:100%; background:#1565C0; width:0%; transition:width .3s; }
+
+    .status-text { font-size:12px; color:#666; margin-left:auto; white-space:nowrap; }
+    .small-text  { font-size:11px; color:#aaa; }
+
+    .content { flex:1; position:relative; }
+    #map { width:100%; height:100%; }
+    .leaflet-container { background:#d8e4ee; }
+
+    /* 图层控件 */
+    .leaflet-control-layers {
+      border-radius:8px !important; border:none !important;
+      box-shadow:0 2px 14px rgba(0,0,0,0.16) !important;
     }
-    .btn-secondary:hover {
-      background: #d5d5d5;
+    .leaflet-control-layers-expanded { padding:8px 12px !important; min-width:185px; }
+    .leaflet-control-layers-base label,
+    .leaflet-control-layers-overlays label { font-size:13px; margin:3px 0; }
+    .leaflet-control-layers-separator { margin:6px 0 !important; }
+    .leaflet-control-attribution { font-size:10px !important; }
+    /* 在小屏幕上让工具栏正常折行，避免底图控件挡住全部地图 */
+    @media (max-width:700px) {
+      .top-bar { padding:8px; gap:6px; }
+      .top-bar-title { width:100%; }
+      .top-bar label { display:inline-flex; align-items:center; gap:4px; }
+      .top-bar input[type="text"] { max-width:160px; }
+      .top-bar input[type="file"] { max-width:155px; }
+      .vd { display:none; }
+      .status-text { width:100%; margin-left:0; white-space:normal; }
+      .small-text { display:none; }
+      .leaflet-control-layers-expanded { min-width:160px; }
     }
-    .status-text {
-      font-size: 12px;
-      color: #666;
-      margin-left: auto;
-      white-space: nowrap;
-    }
-    .content {
-      flex: 1;
-      position: relative;
-    }
-    #map {
-      width: 100%;
-      height: 100%;
-    }
-    .leaflet-container {
-      background: #dde3ea;
+    .map-hint {
+      position:absolute; left:50%; bottom:26px; transform:translateX(-50%);
+      background:rgba(255,255,255,.96); color:#384657; border-radius:9px;
+      box-shadow:0 2px 12px rgba(0,0,0,.15); padding:8px 13px;
+      font-size:12px; line-height:1.5; z-index:950; max-width:min(520px,90%);
+      display:none; pointer-events:none; text-align:center;
     }
 
-    /* 弹出框样式 */
-    .photo-popup {
-      text-align: center;
-      min-width: 250px;
+    /* 区划标注 */
+    .district-label {
+      background:rgba(255,255,255,0.88); border:1px solid #1565C0;
+      border-radius:4px; padding:2px 7px; font-size:12px; font-weight:600;
+      color:#0d47a1; pointer-events:none; white-space:nowrap;
+      box-shadow:0 1px 4px rgba(0,0,0,0.12);
     }
-    .photo-popup img {
-      width: 100%;
-      max-width: 400px;
-      border-radius: 8px;
-      margin-bottom: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    .district-hover-tip {
+      background:rgba(255,255,255,0.95); border:1px solid #e65100;
+      border-radius:4px; padding:3px 8px; font-size:13px;
+      color:#bf360c; pointer-events:none; white-space:nowrap;
     }
-    .photo-popup .info {
-      font-size: 13px;
-      color: #555;
-      line-height: 1.6;
+
+    /* 河流 tooltip */
+    .river-tip {
+      background:rgba(21,101,192,0.9); border:none;
+      border-radius:4px; padding:3px 8px; font-size:12px;
+      color:#fff; pointer-events:none; white-space:nowrap;
     }
-    .photo-popup .info strong {
-      color: #333;
-    }
+
+    /* 照片弹窗 */
+    .photo-popup { text-align:center; min-width:250px; }
+    .photo-popup img { width:100%; max-width:400px; border-radius:8px; margin-bottom:10px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+    .photo-popup .info { font-size:13px; color:#555; line-height:1.6; }
+    .photo-popup .info strong { color:#333; }
     .photo-marker {
-      background: #4CAF50;
-      border: 3px solid white;
-      border-radius: 50%;
-      width: 30px;
-      height: 30px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: bold;
-      font-size: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      cursor: pointer;
+      background:#43a047; border:3px solid #fff; border-radius:50%;
+      width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+      color:#fff; font-weight:bold; font-size:12px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.3); cursor:pointer;
     }
-    .leaflet-popup-content {
-      margin: 15px;
-    }
-
-    .small-text {
-      font-size: 11px;
-      color: #999;
-    }
+    .leaflet-popup-content { margin:15px; }
   </style>
 </head>
 <body>
-  <div class="layout">
-    <div class="top-bar">
-      <div class="top-bar-title">📸 照片地图生成器（网页版）</div>
+<div class="layout">
+  <div class="top-bar">
+    <div class="top-bar-title">📸 照片地图生成器</div>
 
-      <label>
-        标题：
-        <input type="text" id="titleInput" placeholder="例如：天津旅行地图" />
-      </label>
+    <!-- 照片 -->
+    <label>标题：<input type="text" id="titleInput" style="min-width:140px" placeholder="我的照片地图"/></label>
+    <label>文件夹：<input type="file" id="dirInput"  webkitdirectory multiple accept="image/*"></label>
+    <label>文件：<input   type="file" id="fileInput" multiple accept="image/*"></label>
+    <button id="generateBtn" class="btn btn-green">🚀 生成地图</button>
+    <button id="clearBtn"    class="btn btn-gray" >🧹 清空</button>
 
-      <label>
-        选择照片文件夹：
-        <!-- webkitdirectory 仅在基于 Chromium 的浏览器中可用（Chrome / Edge） -->
-        <input type="file" id="dirInput" webkitdirectory multiple accept="image/*">
-      </label>
+    <div class="vd"></div>
 
-      <label>
-        或选择照片文件：
-        <input type="file" id="fileInput" multiple accept="image/*">
-      </label>
+    <!-- 区划 -->
+    <label>🏛️ 区划：
+      <input type="text" id="districtInput" style="min-width:130px"
+        placeholder="输入省市名，如：揭阳市、六安" list="cityList"/>
+      <datalist id="cityList"></datalist>
+    </label>
+    <button id="loadDistrictBtn"  class="btn btn-blue">📦 加载</button>
+    <button id="clearDistrictBtn" class="btn btn-red" >✕ 清除</button>
+    <button id="toggleLabelBtn"   class="btn btn-toggle">🏷️ 标注</button>
 
-      <button id="generateBtn" class="btn btn-primary">🚀 生成地图</button>
-      <!-- 新增：清空按钮 -->
-      <button id="clearBtn" class="btn btn-secondary">🧹 清空选择</button>
+    <div class="vd"></div>
 
-      <div class="status-text" id="statusText">请选择照片并点击“生成地图”。</div>
+    <!-- 河流 GeoJSON 控制 -->
+    <button id="loadRiverBtn"  class="btn btn-teal">🌊 加载河流</button>
+    <button id="clearRiverBtn" class="btn btn-gray" >✕ 清除河流</button>
 
-      <div class="small-text">
-        （所有处理都在本地浏览器完成，不会上传到服务器）
-      </div>
-    </div>
-
-    <div class="content">
-      <div id="map"></div>
-    </div>
+    <div class="status-text" id="statusText">请选择照片并点击"生成地图"。</div>
+    <div class="small-text">（照片仅在本地处理 · 底图在线加载 · 无高德地图）</div>
   </div>
 
-  <!-- Leaflet JS -->
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+  <div class="content">
+    <div id="map"></div>
+    <div id="mapHint" class="map-hint"></div>
+    <div class="progress-bar-wrap" id="progressWrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+  </div>
+</div>
 
-  <!-- exif-js：用来读取照片 EXIF 信息 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- MapLibre + Leaflet 适配层：OpenFreeMap 的矢量底图（无需 API Key） -->
+<script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+<script>
+// ── 本地行政区划编码：无需联网查询代码 ──────────────────────────────
+// 区划基础数据：Vant area-data (MIT)。边界仍由在线 DataV 服务提供。
+const AREA_ROWS = `110000 北京市
+120000 天津市
+130000 河北省
+140000 山西省
+150000 内蒙古自治区
+210000 辽宁省
+220000 吉林省
+230000 黑龙江省
+310000 上海市
+320000 江苏省
+330000 浙江省
+340000 安徽省
+350000 福建省
+360000 江西省
+370000 山东省
+410000 河南省
+420000 湖北省
+430000 湖南省
+440000 广东省
+450000 广西壮族自治区
+460000 海南省
+500000 重庆市
+510000 四川省
+520000 贵州省
+530000 云南省
+540000 西藏自治区
+610000 陕西省
+620000 甘肃省
+630000 青海省
+640000 宁夏回族自治区
+650000 新疆维吾尔自治区
+710000 台湾省
+810000 香港特别行政区
+820000 澳门特别行政区
+130100 石家庄市
+130200 唐山市
+130300 秦皇岛市
+130400 邯郸市
+130500 邢台市
+130600 保定市
+130700 张家口市
+130800 承德市
+130900 沧州市
+131000 廊坊市
+131100 衡水市
+140100 太原市
+140200 大同市
+140300 阳泉市
+140400 长治市
+140500 晋城市
+140600 朔州市
+140700 晋中市
+140800 运城市
+140900 忻州市
+141000 临汾市
+141100 吕梁市
+150100 呼和浩特市
+150200 包头市
+150300 乌海市
+150400 赤峰市
+150500 通辽市
+150600 鄂尔多斯市
+150700 呼伦贝尔市
+150800 巴彦淖尔市
+150900 乌兰察布市
+152200 兴安盟
+152500 锡林郭勒盟
+152900 阿拉善盟
+210100 沈阳市
+210200 大连市
+210300 鞍山市
+210400 抚顺市
+210500 本溪市
+210600 丹东市
+210700 锦州市
+210800 营口市
+210900 阜新市
+211000 辽阳市
+211100 盘锦市
+211200 铁岭市
+211300 朝阳市
+211400 葫芦岛市
+220100 长春市
+220200 吉林市
+220300 四平市
+220400 辽源市
+220500 通化市
+220600 白山市
+220700 松原市
+220800 白城市
+222400 延边朝鲜族自治州
+230100 哈尔滨市
+230200 齐齐哈尔市
+230300 鸡西市
+230400 鹤岗市
+230500 双鸭山市
+230600 大庆市
+230700 伊春市
+230800 佳木斯市
+230900 七台河市
+231000 牡丹江市
+231100 黑河市
+231200 绥化市
+232700 大兴安岭地区
+320100 南京市
+320200 无锡市
+320300 徐州市
+320400 常州市
+320500 苏州市
+320600 南通市
+320700 连云港市
+320800 淮安市
+320900 盐城市
+321000 扬州市
+321100 镇江市
+321200 泰州市
+321300 宿迁市
+330100 杭州市
+330200 宁波市
+330300 温州市
+330400 嘉兴市
+330500 湖州市
+330600 绍兴市
+330700 金华市
+330800 衢州市
+330900 舟山市
+331000 台州市
+331100 丽水市
+340100 合肥市
+340200 芜湖市
+340300 蚌埠市
+340400 淮南市
+340500 马鞍山市
+340600 淮北市
+340700 铜陵市
+340800 安庆市
+341000 黄山市
+341100 滁州市
+341200 阜阳市
+341300 宿州市
+341500 六安市
+341600 亳州市
+341700 池州市
+341800 宣城市
+350100 福州市
+350200 厦门市
+350300 莆田市
+350400 三明市
+350500 泉州市
+350600 漳州市
+350700 南平市
+350800 龙岩市
+350900 宁德市
+360100 南昌市
+360200 景德镇市
+360300 萍乡市
+360400 九江市
+360500 新余市
+360600 鹰潭市
+360700 赣州市
+360800 吉安市
+360900 宜春市
+361000 抚州市
+361100 上饶市
+370100 济南市
+370200 青岛市
+370300 淄博市
+370400 枣庄市
+370500 东营市
+370600 烟台市
+370700 潍坊市
+370800 济宁市
+370900 泰安市
+371000 威海市
+371100 日照市
+371300 临沂市
+371400 德州市
+371500 聊城市
+371600 滨州市
+371700 菏泽市
+410100 郑州市
+410200 开封市
+410300 洛阳市
+410400 平顶山市
+410500 安阳市
+410600 鹤壁市
+410700 新乡市
+410800 焦作市
+410900 濮阳市
+411000 许昌市
+411100 漯河市
+411200 三门峡市
+411300 南阳市
+411400 商丘市
+411500 信阳市
+411600 周口市
+411700 驻马店市
+420100 武汉市
+420200 黄石市
+420300 十堰市
+420500 宜昌市
+420600 襄阳市
+420700 鄂州市
+420800 荆门市
+420900 孝感市
+421000 荆州市
+421100 黄冈市
+421200 咸宁市
+421300 随州市
+422800 恩施土家族苗族自治州
+430100 长沙市
+430200 株洲市
+430300 湘潭市
+430400 衡阳市
+430500 邵阳市
+430600 岳阳市
+430700 常德市
+430800 张家界市
+430900 益阳市
+431000 郴州市
+431100 永州市
+431200 怀化市
+431300 娄底市
+433100 湘西土家族苗族自治州
+440100 广州市
+440200 韶关市
+440300 深圳市
+440400 珠海市
+440500 汕头市
+440600 佛山市
+440700 江门市
+440800 湛江市
+440900 茂名市
+441200 肇庆市
+441300 惠州市
+441400 梅州市
+441500 汕尾市
+441600 河源市
+441700 阳江市
+441800 清远市
+441900 东莞市
+442000 中山市
+445100 潮州市
+445200 揭阳市
+445300 云浮市
+450100 南宁市
+450200 柳州市
+450300 桂林市
+450400 梧州市
+450500 北海市
+450600 防城港市
+450700 钦州市
+450800 贵港市
+450900 玉林市
+451000 百色市
+451100 贺州市
+451200 河池市
+451300 来宾市
+451400 崇左市
+460100 海口市
+460200 三亚市
+460300 三沙市
+460400 儋州市
+510100 成都市
+510300 自贡市
+510400 攀枝花市
+510500 泸州市
+510600 德阳市
+510700 绵阳市
+510800 广元市
+510900 遂宁市
+511000 内江市
+511100 乐山市
+511300 南充市
+511400 眉山市
+511500 宜宾市
+511600 广安市
+511700 达州市
+511800 雅安市
+511900 巴中市
+512000 资阳市
+513200 阿坝藏族羌族自治州
+513300 甘孜藏族自治州
+513400 凉山彝族自治州
+520100 贵阳市
+520200 六盘水市
+520300 遵义市
+520400 安顺市
+520500 毕节市
+520600 铜仁市
+522300 黔西南布依族苗族自治州
+522600 黔东南苗族侗族自治州
+522700 黔南布依族苗族自治州
+530100 昆明市
+530300 曲靖市
+530400 玉溪市
+530500 保山市
+530600 昭通市
+530700 丽江市
+530800 普洱市
+530900 临沧市
+532300 楚雄彝族自治州
+532500 红河哈尼族彝族自治州
+532600 文山壮族苗族自治州
+532800 西双版纳傣族自治州
+532900 大理白族自治州
+533100 德宏傣族景颇族自治州
+533300 怒江傈僳族自治州
+533400 迪庆藏族自治州
+540100 拉萨市
+540200 日喀则市
+540300 昌都市
+540400 林芝市
+540500 山南市
+540600 那曲市
+542500 阿里地区
+610100 西安市
+610200 铜川市
+610300 宝鸡市
+610400 咸阳市
+610500 渭南市
+610600 延安市
+610700 汉中市
+610800 榆林市
+610900 安康市
+611000 商洛市
+620100 兰州市
+620200 嘉峪关市
+620300 金昌市
+620400 白银市
+620500 天水市
+620600 武威市
+620700 张掖市
+620800 平凉市
+620900 酒泉市
+621000 庆阳市
+621100 定西市
+621200 陇南市
+622900 临夏回族自治州
+623000 甘南藏族自治州
+630100 西宁市
+630200 海东市
+632200 海北藏族自治州
+632300 黄南藏族自治州
+632500 海南藏族自治州
+632600 果洛藏族自治州
+632700 玉树藏族自治州
+632800 海西蒙古族藏族自治州
+640100 银川市
+640200 石嘴山市
+640300 吴忠市
+640400 固原市
+640500 中卫市
+650100 乌鲁木齐市
+650200 克拉玛依市
+650400 吐鲁番市
+650500 哈密市
+652300 昌吉回族自治州
+652700 博尔塔拉蒙古自治州
+652800 巴音郭楞蒙古自治州
+652900 阿克苏地区
+653000 克孜勒苏柯尔克孜自治州
+653100 喀什地区
+653200 和田地区
+654000 伊犁哈萨克自治州
+654200 塔城地区
+654300 阿勒泰地区`;
+const AREA_ENTRIES = AREA_ROWS.trim().split("\n").map(row => {
+  const i = row.indexOf(" ");
+  return { code: row.slice(0, i), name: row.slice(i + 1) };
+});
+const AREA_BY_CODE = new Map(AREA_ENTRIES.map(x => [x.code, x]));
+function normalizeAreaName(s) {
+  return String(s).trim().replace(/\s+/g, "");
+}
+function areaShortName(name) {
+  return name.replace(/(特别行政区|维吾尔自治区|壮族自治区|回族自治区|自治区|省|市|地区|盟)$/, "")
+    .replace(/(蒙古族藏族自治州|土家族苗族自治州|哈尼族彝族自治州|朝鲜族自治州|土家族苗族自治州|藏族羌族自治州|彝族自治州|自治州)$/, "");
+}
+function matchArea(text) {
+  const input = normalizeAreaName(text);
+  if (/^\d{6}$/.test(input)) return AREA_BY_CODE.get(input) || {code:input, name: input};
+  // 精确匹配优先，防止把「汕头」误匹配「汕尾」。
+  const exact = AREA_ENTRIES.filter(x => x.name === input);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return exact.find(x=>x.code.endsWith('0000')) || exact[0];
+  const short = AREA_ENTRIES.filter(x => areaShortName(x.name) === input);
+  if (short.length === 1) return short[0];
+  if (short.length > 1) return null;
+  // 支持输入部分名称，但仅在结果唯一时自动匹配。
+  const partial = AREA_ENTRIES.filter(x => x.name.includes(input));
+  return partial.length === 1 ? partial[0] : null;
+}
+const cityListEl = document.getElementById("cityList");
+AREA_ENTRIES.forEach(x => {
+  const opt = document.createElement("option"); opt.value = x.name;
+  opt.label = x.code;
+  cityListEl.appendChild(opt);
+});
 
-  <script>
-    // =============== 工具函数：DMS -> 十进制度数 ===============
-    function dmsToDecimal(dms, ref) {
-      if (!dms || dms.length < 3 || !ref) return null;
+// ── 全局变量 ─────────────────────────────────────────────────────────────────
+let map = null, markersLayer = null, pathLayer = null;
+let districtLayer = null, labelMarkers = [], labelsVisible = false;
+let riverLayer = null;
+let currentPhotoInfos = [];   // 照片 GPS 统一使用 WGS-84，切换底图不必改变坐标
 
-      function toFloat(v) {
-        if (typeof v === "number") return v;
-        // exif-js 可能返回形如 {numerator: xx, denominator: xx}
-        if (typeof v === "object" && v.numerator !== undefined && v.denominator) {
-          return v.numerator / v.denominator;
-        }
-        // 或 "xx/yy" 字符串
-        if (typeof v === "string") {
-          const parts = v.split("/");
-          if (parts.length === 2) {
-            const num = parseFloat(parts[0]);
-            const den = parseFloat(parts[1]);
-            if (!isNaN(num) && !isNaN(den) && den !== 0) {
-              return num / den;
-            }
-          } else {
-            const f = parseFloat(v);
-            if (!isNaN(f)) return f;
-          }
-        }
-        return NaN;
-      }
+// ── 底图初始化 ──────────────────────────────────────────────────────────────
+// 不使用高德和 GCJ-02 转换，照片点和 WGS84 底图共用同一坐标系。
+// OpenFreeMap 为免费、免 API key 的矢量瓦片；其余为按需载入的栅格底图。
+function showMapHint(message, duration = 6500) {
+  const el = document.getElementById("mapHint");
+  if (!el) return;
+  el.textContent = message;
+  el.style.display = "block";
+  clearTimeout(showMapHint.timer);
+  showMapHint.timer = setTimeout(() => { el.style.display = "none"; }, duration);
+}
+function initMapIfNeeded() {
+  if (map) return;
+  map = L.map("map", { minZoom: 2, maxZoom: 19, zoomControl: true })
+    .setView([34.0, 108.0], 5);
 
-      const deg = toFloat(dms[0]);
-      const min = toFloat(dms[1]);
-      const sec = toFloat(dms[2]);
+  const osmAttribution = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 贡献者';
+  const ofmAttribution = osmAttribution + ' · <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>';
+  const streetFallback = L.tileLayer(
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxNativeZoom:19, maxZoom:19, attribution:osmAttribution }
+  );
+  const topo = L.tileLayer(
+    "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    { subdomains:"abc", maxNativeZoom:17, maxZoom:19,
+      attribution:'© <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> · ' + osmAttribution }
+  );
+  const satellite = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxNativeZoom:18, maxZoom:19,
+      attribution:'影像 © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>、影像数据提供方' }
+  );
 
-      if ([deg, min, sec].some(v => isNaN(v))) return null;
-
-      let dec = deg + (min / 60.0) + (sec / 3600.0);
-      ref = String(ref).toUpperCase();
-      if (ref === "S" || ref === "W") {
-        dec = -dec;
-      }
-      return dec;
-    }
-
-    // =============== 全局变量：地图实例 ===============
-    let map = null;
-    let markersLayer = null;
-    let pathLayer = null;
-
-    function initMapIfNeeded() {
-      if (!map) {
-        map = L.map("map").setView([34.0, 108.0], 5);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: "© OpenStreetMap contributors"
-        }).addTo(map);
-      }
-    }
-
-    function clearMapLayers() {
-      if (markersLayer) {
-        markersLayer.remove();
-        markersLayer = null;
-      }
-      if (pathLayer) {
-        pathLayer.remove();
-        pathLayer = null;
-      }
-    }
-
-    // =============== 处理单个文件：读取 EXIF + DataURL ===============
-    function processFile(file) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-
-        reader.onload = function (e) {
-          let tags;
-          try {
-            tags = EXIF.readFromBinaryFile(e.target.result);
-          } catch (err) {
-            console.warn("EXIF 解析失败：", file.name, err);
-            resolve(null);
-            return;
-          }
-
-          const latDMS = tags.GPSLatitude;
-          const lonDMS = tags.GPSLongitude;
-          const latRef = tags.GPSLatitudeRef;
-          const lonRef = tags.GPSLongitudeRef;
-
-          const lat = dmsToDecimal(latDMS, latRef);
-          const lon = dmsToDecimal(lonDMS, lonRef);
-
-          if (lat === null || lon === null) {
-            // 没有 GPS 信息，返回 null
-            resolve(null);
-            return;
-          }
-
-          // 获取其他信息
-          const dt = tags.DateTimeOriginal || tags.DateTime || null;
-          const make = tags.Make || "";
-          const model = tags.Model || "";
-          const camera = (make && model) ? (make + " " + model) : (model || null);
-
-          let altitude = null;
-          if (tags.GPSAltitude) {
-            const altVal = tags.GPSAltitude;
-            if (typeof altVal === "object" && altVal.numerator !== undefined) {
-              altitude = altVal.numerator / altVal.denominator;
-            } else if (typeof altVal === "number") {
-              altitude = altVal;
-            }
-          }
-
-          // 再读取一次文件，获取 DataURL 用于缩略图
-          const reader2 = new FileReader();
-          reader2.onload = function (ev) {
-            const dataUrl = ev.target.result;
-            resolve({
-              lat: lat,
-              lon: lon,
-              filename: file.name,
-              datetime: dt ? String(dt) : null,
-              camera: camera ? String(camera) : null,
-              altitude: altitude,
-              image: dataUrl
-            });
-          };
-          reader2.onerror = function () {
-            // 即使缩略图失败，也返回基本信息
-            resolve({
-              lat: lat,
-              lon: lon,
-              filename: file.name,
-              datetime: dt ? String(dt) : null,
-              camera: camera ? String(camera) : null,
-              altitude: altitude,
-              image: null
-            });
-          };
-          reader2.readAsDataURL(file);
-        };
-
-        reader.onerror = function () {
-          console.warn("文件读取失败：", file.name);
-          resolve(null);
-        };
-
-        reader.readAsArrayBuffer(file);
-      });
-    }
-
-    // =============== 主流程：生成地图 ===============
-    async function generateMapFromFiles(fileList) {
-      const statusText = document.getElementById("statusText");
-
-      if (!fileList || fileList.length === 0) {
-        alert("请先选择至少一张照片。");
-        return;
-      }
-
-      statusText.textContent = `正在读取 ${fileList.length} 张照片的 EXIF 信息，请稍候…`;
-
-      const files = Array.from(fileList);
-      const photoInfos = [];
-
-      let processed = 0;
-      for (const file of files) {
-        // 只处理图片
-        if (!file.type.startsWith("image/")) {
-          processed++;
-          continue;
-        }
-        const info = await processFile(file);
-        if (info && info.lat !== null && info.lon !== null) {
-          photoInfos.push(info);
-        }
-        processed++;
-        statusText.textContent = `已处理 ${processed}/${files.length} 张照片…`;
-      }
-
-      if (photoInfos.length === 0) {
-        statusText.textContent = "未找到包含 GPS 信息的照片。";
-        alert("没有发现带 GPS 坐标的照片，无法生成地图。");
-        return;
-      }
-
-      // 按时间排序
-      photoInfos.sort((a, b) => {
-        const da = a.datetime || "";
-        const db = b.datetime || "";
-        return da.localeCompare(db);
-      });
-
-      // 计算中心点
-      const centerLat = photoInfos.reduce((sum, p) => sum + p.lat, 0) / photoInfos.length;
-      const centerLon = photoInfos.reduce((sum, p) => sum + p.lon, 0) / photoInfos.length;
-
-      initMapIfNeeded();
-      clearMapLayers();
-
-      map.setView([centerLat, centerLon], 12);
-
-      markersLayer = L.layerGroup().addTo(map);
-
-      const pathCoords = [];
-      const markers = [];
-
-      photoInfos.forEach((photo, idx) => {
-        const index = idx + 1;
-        pathCoords.push([photo.lat, photo.lon]);
-
-        const markerIcon = L.divIcon({
-          className: "photo-marker",
-          html: index,
-          iconSize: [30, 30]
-        });
-
-        let popupContent = '<div class="photo-popup">';
-        if (photo.image) {
-          popupContent += `<img src="${photo.image}" alt="${photo.filename}">`;
-        }
-        popupContent += '<div class="info">';
-        popupContent += `<strong>📷 ${photo.filename}</strong><br>`;
-        if (photo.datetime) {
-          popupContent += `🕐 ${photo.datetime}<br>`;
-        }
-        if (photo.camera) {
-          popupContent += `📱 ${photo.camera}<br>`;
-        }
-        if (photo.altitude !== null && !isNaN(photo.altitude)) {
-          popupContent += `⛰️ 海拔: ${photo.altitude.toFixed(1)} m<br>`;
-        }
-        popupContent += `📍 ${photo.lat.toFixed(6)}, ${photo.lon.toFixed(6)}`;
-        popupContent += "</div></div>";
-
-        const marker = L.marker([photo.lat, photo.lon], { icon: markerIcon })
-          .bindPopup(popupContent, { maxWidth: 450 })
-          .addTo(markersLayer);
-
-        markers.push(marker);
-      });
-
-      // 折线连接轨迹
-      if (pathCoords.length > 1) {
-        pathLayer = L.polyline(pathCoords, {
-          color: "#FF5722",
-          weight: 3,
-          opacity: 0.7,
-          dashArray: "10,10",
-          lineJoin: "round"
-        }).addTo(map);
-      }
-
-      // 自适应视图
-      if (markers.length > 0) {
-        const group = L.featureGroup(markers);
-        map.fitBounds(group.getBounds().pad(0.1));
-      }
-
-      const titleInput = document.getElementById("titleInput");
-      const title = titleInput.value.trim() || "我的照片地图";
-      statusText.textContent = `✅ 地图已生成：${title}（共 ${photoInfos.length} 张带 GPS 的照片）`;
-
-      // 生成完后，自动清空文件选择（强制下次重新选）
-      const dirInput = document.getElementById("dirInput");
-      const fileInput = document.getElementById("fileInput");
-      dirInput.value = "";
-      fileInput.value = "";
-    }
-
-    // =============== 事件绑定 ===============
-    window.addEventListener("DOMContentLoaded", () => {
-      const dirInput = document.getElementById("dirInput");
-      const fileInput = document.getElementById("fileInput");
-      const generateBtn = document.getElementById("generateBtn");
-      const clearBtn = document.getElementById("clearBtn");
-      const titleInput = document.getElementById("titleInput");
-      const statusText = document.getElementById("statusText");
-
-      // 默认标题
-      titleInput.value = "我的照片地图";
-
-      generateBtn.addEventListener("click", () => {
-        const dirFiles = dirInput.files;
-        const normalFiles = fileInput.files;
-
-        if (dirFiles && dirFiles.length > 0) {
-          generateMapFromFiles(dirFiles);
-        } else if (normalFiles && normalFiles.length > 0) {
-          generateMapFromFiles(normalFiles);
-        } else {
-          alert("请先选择照片（文件夹或文件都可以）。");
-        }
-      });
-
-      // 新增：清空按钮逻辑
-      clearBtn.addEventListener("click", () => {
-        dirInput.value = "";
-        fileInput.value = "";
-        clearMapLayers();
-        if (map) {
-          // 地图恢复到一个大致的全国视角
-          map.setView([34.0, 108.0], 5);
-        }
-        statusText.textContent = "已清空选择，请重新选择照片并生成地图。";
-      });
-
-      // 初始化一个空地图背景
-      initMapIfNeeded();
+  const baseLayers = {};
+  const supportsVector = (typeof L.maplibreGL === "function" &&
+    typeof maplibregl !== "undefined" &&
+    typeof maplibregl.supported === "function" && maplibregl.supported());
+  let defaultLayer;
+  if (supportsVector) {
+    const liberty = L.maplibreGL({
+      style:"https://tiles.openfreemap.org/styles/liberty", attribution:ofmAttribution
     });
-  </script>
+    const positron = L.maplibreGL({
+      style:"https://tiles.openfreemap.org/styles/positron", attribution:ofmAttribution
+    });
+    baseLayers["🏙️ 城市街道 · OpenFreeMap"] = liberty;
+    baseLayers["◻️ 清爽简洁 · OpenFreeMap"] = positron;
+    defaultLayer = liberty;
+
+    // 如果服务器、矢量瓦片或 WebGL 异常，自动切回标准 OSM，而不是灰屏。
+    for (const layer of [liberty, positron]) {
+      layer.on("add", () => {
+        const glMap = layer.getMaplibreMap && layer.getMaplibreMap();
+        if (!glMap || layer._errorHandlerAdded) return;
+        layer._errorHandlerAdded = true;
+        let failures = 0;
+        glMap.on("error", () => {
+          if (!map.hasLayer(layer) || ++failures < 3) return;
+          map.removeLayer(layer);
+          if (!map.hasLayer(streetFallback)) streetFallback.addTo(map);
+          showMapHint("OpenFreeMap 加载失败，已经自动换成标准街道地图。可以稍后重试。", 8500);
+          document.getElementById("statusText").textContent = "已自动切换到备用底图（OpenStreetMap）。";
+        });
+        glMap.on("load", () => { failures = 0; });
+      });
+    }
+  } else {
+    defaultLayer = streetFallback;
+    showMapHint("矢量底图组件未加载，已启用标准街道地图；请检查网络。", 8500);
+  }
+  baseLayers["🗺️ 标准街道 · OSM（备用）"] = streetFallback;
+  baseLayers["⛰️ 地形等高线 · OpenTopoMap"] = topo;
+  baseLayers["🛰️ 卫星影像 · Esri"] = satellite;
+
+  defaultLayer.addTo(map);
+  L.control.layers(baseLayers, null, {
+    position:"topright", collapsed:window.innerWidth < 650
+  }).addTo(map);
+
+  // 影像和地形瓦片出错时给出说明：某些地区/缩放级别可能暂时缺瓦片。
+  for (const layer of [topo, satellite, streetFallback]) {
+    let errors = 0;
+    layer.on("tileerror", () => {
+      if (!map.hasLayer(layer)) return;
+      if (++errors === 4) showMapHint("当前底图部分瓦片加载失败，可在右上角切换为标准街道或其他底图。", 8500);
+    });
+    layer.on("load", () => { errors = 0; });
+  }
+
+  // OpenFreeMap 无需额外绑定高德的坐标修正；只有区划/河流/照片需要正常叠加。
+  map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
+}
+
+// ── 清除函数 ─────────────────────────────────────────────────────────────────
+function clearMapLayers() {
+  if (markersLayer) { markersLayer.remove(); markersLayer = null; }
+  if (pathLayer)    { pathLayer.remove();    pathLayer    = null; }
+  currentPhotoInfos = [];
+}
+
+// ── 按照片原始 GPS 坐标绘制标记（WGS-84） ───────────────────────────────────
+function rebuildPhotoMarkers() {
+  if (!currentPhotoInfos.length) return;
+  if (markersLayer) { markersLayer.remove(); markersLayer = null; }
+  if (pathLayer)    { pathLayer.remove();    pathLayer    = null; }
+
+  markersLayer = L.layerGroup().addTo(map);
+  const pathCoords = [], markers = [];
+
+  currentPhotoInfos.forEach((photo, idx) => {
+    const [dispLat, dispLon] = [photo.lat, photo.lon];
+
+    pathCoords.push([dispLat, dispLon]);
+    const icon = L.divIcon({className:"photo-marker", html: idx+1, iconSize:[30,30]});
+    let popup = '<div class="photo-popup">';
+    if (photo.image) popup += `<img src="${photo.image}" alt="${photo.filename}">`;
+    popup += '<div class="info">';
+    popup += `<strong>📷 ${photo.filename}</strong><br>`;
+    if (photo.datetime) popup += `🕐 ${photo.datetime}<br>`;
+    if (photo.camera)   popup += `📱 ${photo.camera}<br>`;
+    if (photo.altitude !== null && !isNaN(photo.altitude)) popup += `⛰️ 海拔: ${photo.altitude.toFixed(1)} m<br>`;
+    popup += `📍 ${photo.lat.toFixed(6)}, ${photo.lon.toFixed(6)}`;
+    popup += "</div></div>";
+    const m = L.marker([dispLat, dispLon], {icon}).bindPopup(popup, {maxWidth:450}).addTo(markersLayer);
+    markers.push(m);
+  });
+
+  if (pathCoords.length > 1)
+    pathLayer = L.polyline(pathCoords, {color:"#FF5722", weight:3, opacity:0.7, dashArray:"10,10", lineJoin:"round"}).addTo(map);
+}
+function clearDistrict() {
+  if (districtLayer) { districtLayer.remove(); districtLayer = null; }
+  clearLabels();
+}
+function clearLabels() {
+  labelMarkers.forEach(m => map && map.removeLayer(m));
+  labelMarkers = [];
+}
+function clearRiver() {
+  if (riverLayer) { riverLayer.remove(); riverLayer = null; }
+}
+
+// ── 标注开关 ─────────────────────────────────────────────────────────────────
+function applyLabelVisibility(v) {
+  labelsVisible = v;
+  const btn = document.getElementById("toggleLabelBtn");
+  if (v) {
+    btn.classList.add("on"); btn.textContent = "🏷️ 标注 ✓";
+    labelMarkers.forEach(m => m.addTo(map));
+  } else {
+    btn.classList.remove("on"); btn.textContent = "🏷️ 标注";
+    labelMarkers.forEach(m => map.removeLayer(m));
+  }
+}
+
+// ── 加载河流 GeoJSON（Natural Earth 50m） ────────────────────────────────────
+// 数据源：Natural Earth ne_50m_rivers_lake_centerlines
+// 包含全球主要河流，中国有长江、黄河、珠江、黑龙江、雅鲁藏布江等
+async function loadRivers() {
+  const status = document.getElementById("statusText");
+  if (riverLayer) { alert("河流图层已加载，如需重置请先点击「✕ 清除河流」。"); return; }
+
+  initMapIfNeeded();
+  status.textContent = "⏳ 正在加载河流数据（约 800KB）…";
+
+  // 显示进度条动画
+  const wrap = document.getElementById("progressWrap");
+  const bar  = document.getElementById("progressBar");
+  wrap.style.display = "block";
+  bar.style.width = "30%";
+
+  const URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_rivers_lake_centerlines.geojson";
+
+  let geojson;
+  try {
+    bar.style.width = "60%";
+    const res = await fetch(URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    bar.style.width = "85%";
+    geojson = await res.json();
+    bar.style.width = "100%";
+  } catch(err) {
+    wrap.style.display = "none";
+    status.textContent = `❌ 河流数据加载失败：${err.message}`;
+    alert(`河流数据加载失败，请检查网络连接。\n${err.message}`);
+    return;
+  }
+
+  setTimeout(()=>{ wrap.style.display="none"; bar.style.width="0%"; }, 600);
+
+  clearRiver();
+
+  riverLayer = L.geoJSON(geojson, {
+    // 按 scalerank / strokeweightvar 控制河流粗细
+    // scalerank 越小 = 越大的河（1 = 长江/黄河级别）
+    style(feature) {
+      const rank = feature.properties.scalerank || 8;
+      // 河流宽度：大河粗，支流细
+      const weight  = rank <= 2 ? 3.5 : rank <= 4 ? 2.5 : rank <= 6 ? 1.5 : 0.9;
+      const opacity = rank <= 2 ? 0.90 : rank <= 4 ? 0.80 : rank <= 6 ? 0.70 : 0.55;
+      return {
+        color:   "#1565C0",
+        weight:  weight,
+        opacity: opacity,
+        lineCap: "round",
+        lineJoin:"round",
+      };
+    },
+
+    onEachFeature(feature, layer) {
+      const name = feature.properties.name || feature.properties.name_en || "";
+      const nameCN = feature.properties.name_zh || feature.properties.name || "";
+      // 悬停显示河流名
+      if (name) {
+        layer.on("mouseover", function(e) {
+          layer.bindTooltip(nameCN || name, {
+            permanent: false, className:"river-tip", sticky:true
+          }).openTooltip(e.latlng);
+        });
+        layer.on("mouseout", function() { layer.closeTooltip(); });
+        layer.bindPopup(
+          `<b style="font-size:14px">🌊 ${nameCN || name}</b>` +
+          (feature.properties.name_en && feature.properties.name_en !== name
+            ? `<br><span style="color:#666;font-size:12px">${feature.properties.name_en}</span>` : "")
+        );
+      }
+    }
+  }).addTo(map);
+
+  const count = geojson.features ? geojson.features.length : 0;
+  status.textContent = `✅ 河流图层已加载（共 ${count} 条河流，悬停可查看名称）`;
+}
+
+// ── 加载区划 ─────────────────────────────────────────────────────────────────
+async function loadDistrict() {
+  const input = document.getElementById("districtInput").value.trim();
+  const status = document.getElementById("statusText");
+  if (!input) { alert("请输入城市名称"); return; }
+
+  const area = matchArea(input);
+  if (!area) {
+    status.textContent = `未找到或无法唯一确定“${input}”。请从下拉建议中选择完整名称，或输入六位区划代码。`;
+    alert(`无法确定“${input}”对应的行政区划。\n请选择下拉建议中的完整名称，或直接输入六位区划代码。`);
+    return;
+  }
+  const adcode = area.code;
+  const areaName = area.name;
+
+  status.textContent = `⏳ 已识别${areaName}（${adcode}），正在获取区划边界…`;
+  initMapIfNeeded();
+
+  let geojson;
+  try {
+    const res = await fetch(`https://geo.datav.aliyun.com/areas_v3/bound/${adcode}_full.json`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    geojson = await res.json();
+  } catch(err) {
+    status.textContent = `❌ 已找到${areaName}（${adcode}），但在线边界获取失败：${err.message}`; alert(`已找到${areaName}的区划编码：${adcode}。\n但无法获取在线区划边界，请检查网络或稍后重试。`); return;
+  }
+
+  if (!geojson || !Array.isArray(geojson.features) || !geojson.features.length) {
+    status.textContent = `没有获取到${areaName}（${adcode}）的子区划数据。`;
+    return;
+  }
+  clearDistrict();
+  const palette = ["#1565C0","#2E7D32","#6A1B9A","#E65100","#00838F","#AD1457","#37474F","#558B2F"];
+  let ci = 0; const cm = {};
+
+  districtLayer = L.geoJSON(geojson, {
+    style(f) {
+      const n = f.properties.name||"";
+      if (!cm[n]) cm[n] = palette[ci++ % palette.length];
+      return { color:cm[n], weight:2, opacity:0.85, fillColor:cm[n], fillOpacity:0.07 };
+    },
+    onEachFeature(f, layer) {
+      const name  = f.properties.name  || "未知";
+      const level = f.properties.level || "";
+      const adc   = f.properties.adcode|| "";
+      const lvMap = {province:"省级",city:"地级市",district:"区县级",street:"乡镇级"};
+
+      layer.on("mouseover", e => {
+        layer.setStyle({fillOpacity:0.28, weight:3});
+        layer.bindTooltip(name,{permanent:false,className:"district-hover-tip",direction:"center"})
+          .openTooltip(e.latlng);
+      });
+      layer.on("mouseout", ()=>{ districtLayer.resetStyle(layer); layer.closeTooltip(); });
+      layer.bindPopup(
+        `<b style="font-size:14px">📍 ${name}</b><br>` +
+        `<span style="font-size:12px;color:#666">` +
+        (level ? `级别：${lvMap[level]||level}<br>`:"")+
+        (adc   ? `区划码：${adc}`:"")+`</span>`
+      );
+
+      const center = layer.getBounds().getCenter();
+      const lm = L.marker(center, {
+        icon: L.divIcon({className:"",html:`<div class="district-label">${name}</div>`,iconSize:null,iconAnchor:[0,0]}),
+        interactive:false, zIndexOffset:-500
+      });
+      labelMarkers.push(lm);
+    }
+  }).addTo(map);
+
+  if (labelsVisible) labelMarkers.forEach(m => m.addTo(map));
+  map.fitBounds(districtLayer.getBounds().pad(0.05));
+  const count = geojson.features ? geojson.features.length : 0;
+  status.textContent = `✅ 已加载${areaName}区划（共 ${count} 个子区域）`;
+}
+
+// ── EXIF ──────────────────────────────────────────────────────────────────────
+function dmsToDecimal(dms, ref) {
+  if (!dms||dms.length<3||!ref) return null;
+  function tv(v) {
+    if (typeof v==="number") return v;
+    if (typeof v==="object"&&v.numerator!==undefined&&v.denominator) return v.numerator/v.denominator;
+    if (typeof v==="string"){const p=v.split("/");if(p.length===2){const n=parseFloat(p[0]),d=parseFloat(p[1]);return!isNaN(n)&&!isNaN(d)&&d?n/d:NaN;}return isNaN(parseFloat(v))?NaN:parseFloat(v);}
+    return NaN;
+  }
+  const d=tv(dms[0]),m=tv(dms[1]),s=tv(dms[2]);
+  if([d,m,s].some(v=>isNaN(v))) return null;
+  let dec=d+m/60+s/3600;
+  if(/^[SW]$/i.test(String(ref))) dec=-dec;
+  return dec;
+}
+
+function processFile(file) {
+  return new Promise(resolve=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      let tags; try{tags=EXIF.readFromBinaryFile(e.target.result);}catch{resolve(null);return;}
+      const lat=dmsToDecimal(tags.GPSLatitude,tags.GPSLatitudeRef);
+      const lon=dmsToDecimal(tags.GPSLongitude,tags.GPSLongitudeRef);
+      if(lat===null||lon===null||!Number.isFinite(lat)||!Number.isFinite(lon)){resolve(null);return;}
+      const dt=tags.DateTimeOriginal||tags.DateTime||null;
+      const mk=tags.Make||"",mo=tags.Model||"";
+      const cam=mk&&mo?mk+" "+mo:mo||null;
+      let alt=null;
+      if(tags.GPSAltitude){const av=tags.GPSAltitude;alt=typeof av==="object"&&av.numerator!==undefined?av.numerator/av.denominator:typeof av==="number"?av:null;}
+      const r2=new FileReader();
+      r2.onload=ev=>resolve({lat,lon,filename:file.name,datetime:dt?String(dt):null,camera:cam?String(cam):null,altitude:alt,image:ev.target.result});
+      r2.onerror=()=>resolve({lat,lon,filename:file.name,datetime:dt?String(dt):null,camera:cam?String(cam):null,altitude:alt,image:null});
+      r2.readAsDataURL(file);
+    };
+    r.onerror=()=>resolve(null);
+    r.readAsArrayBuffer(file);
+  });
+}
+
+async function generateMapFromFiles(fileList) {
+  const status=document.getElementById("statusText");
+  if(!fileList||!fileList.length){alert("请先选择至少一张照片。");return;}
+  status.textContent=`正在读取 ${fileList.length} 张照片的 EXIF 信息…`;
+  const files=Array.from(fileList),photoInfos=[];
+  let proc=0;
+  for(const file of files){
+    if(!file.type.startsWith("image/")){proc++;continue;}
+    const info=await processFile(file);
+    if(info) photoInfos.push(info);
+    proc++;
+    status.textContent=`已处理 ${proc}/${files.length} 张照片…`;
+  }
+  if(!photoInfos.length){status.textContent="未找到包含 GPS 信息的照片。";alert("没有发现带 GPS 坐标的照片。");return;}
+  photoInfos.sort((a,b)=>(a.datetime||"").localeCompare(b.datetime||""));
+  initMapIfNeeded(); clearMapLayers();
+  currentPhotoInfos = photoInfos;
+
+  // 定位到照片中心（使用原始 WGS-84 坐标）
+  const cLat=photoInfos.reduce((s,p)=>s+p.lat,0)/photoInfos.length;
+  const cLon=photoInfos.reduce((s,p)=>s+p.lon,0)/photoInfos.length;
+  map.setView([cLat,cLon],12);
+
+  // 绘制标记（使用原始 GPS 坐标，不做偏移变换）
+  rebuildPhotoMarkers();
+
+  if(markersLayer){
+    const allMarkers=[];
+    markersLayer.eachLayer(m=>allMarkers.push(m));
+    if(allMarkers.length) map.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.1));
+  }
+  const title=document.getElementById("titleInput").value.trim()||"我的照片地图";
+  status.textContent=`✅ 地图已生成：${title}（共 ${photoInfos.length} 张带 GPS 的照片）`;
+  document.getElementById("dirInput").value="";
+  document.getElementById("fileInput").value="";
+}
+
+// ── 事件绑定 ──────────────────────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded",()=>{
+  document.getElementById("titleInput").value="我的照片地图";
+
+  document.getElementById("generateBtn").addEventListener("click",()=>{
+    const df=document.getElementById("dirInput").files;
+    const ff=document.getElementById("fileInput").files;
+    if(df&&df.length) generateMapFromFiles(df);
+    else if(ff&&ff.length) generateMapFromFiles(ff);
+    else alert("请先选择照片。");
+  });
+
+  document.getElementById("clearBtn").addEventListener("click",()=>{
+    document.getElementById("dirInput").value="";
+    document.getElementById("fileInput").value="";
+    clearMapLayers();
+    if(map) map.setView([34.0,108.0],5);
+    document.getElementById("statusText").textContent="已清空照片。";
+  });
+
+  document.getElementById("loadDistrictBtn").addEventListener("click",loadDistrict);
+  document.getElementById("districtInput").addEventListener("keydown",e=>{if(e.key==="Enter")loadDistrict();});
+
+  document.getElementById("clearDistrictBtn").addEventListener("click",()=>{
+    clearDistrict(); labelsVisible=false;
+    document.getElementById("toggleLabelBtn").classList.remove("on");
+    document.getElementById("toggleLabelBtn").textContent="🏷️ 标注";
+    document.getElementById("statusText").textContent="已清除区划图层。";
+  });
+
+  document.getElementById("toggleLabelBtn").addEventListener("click",()=>{
+    if(!districtLayer){alert("请先加载区划边界。");return;}
+    applyLabelVisibility(!labelsVisible);
+  });
+
+  document.getElementById("loadRiverBtn").addEventListener("click", loadRivers);
+
+  document.getElementById("clearRiverBtn").addEventListener("click",()=>{
+    clearRiver();
+    document.getElementById("statusText").textContent="已清除河流图层。";
+  });
+
+  initMapIfNeeded();
+});
+</script>
 </body>
 </html>
-
